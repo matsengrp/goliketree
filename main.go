@@ -148,7 +148,7 @@ func main() {
 	nodeIndices := make([]C.int, edgeCount)
 
 	nextId := 0
-	t.PreOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
+	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
 		cur.SetId(nextId)
 		nextId = nextId + 1
 
@@ -180,10 +180,10 @@ func main() {
 	C.beagleSetEigenDecomposition(instance, 0, &evec[0], &ivec[0], &eval[0])
 
 	C.beagleUpdateTransitionMatrices(instance,
-		0, // eigenIndex
-		(*C.int)(&nodeIndices[0]), // probabilityIndices
-		nil, // firstDerivativeIndices
-		nil, // secondDerivativeIndices
+		0,                            // eigenIndex
+		(*C.int)(&nodeIndices[0]),    // probabilityIndices
+		nil,                          // firstDerivativeIndices
+		nil,                          // secondDerivativeIndices
 		(*C.double)(&edgeLengths[0]), // edgeLengths
 		C.int(edgeCount))             // count
 
@@ -191,24 +191,38 @@ func main() {
 	operations := make([]C.BeagleOperation, 0, operationCount)
 
 	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
-		if cur != t.Root() && cur.Tip() == false {
-			if cur.Nneigh() != 3 {
-				panic("Internal node doesn't have degree 3")
-			}
+		if cur.Tip() == false {
+			var left_child_id C.int
+			var right_child_id C.int
 			neigh := cur.Neigh()
-			if neigh[0] != prev {
-				panic("Neighbors are not ordered as expected.")
+			// For now, we assume a bifurcating root
+			if cur == t.Root() {
+				left_child_id = C.int(neigh[0].Id())
+				right_child_id = C.int(neigh[1].Id())
+			} else {
+				if cur.Nneigh() != 3 {
+					panic("Internal node doesn't have degree 3.")
+				}
+				if neigh[0] != prev {
+					panic("Neighbors are not ordered as expected.")
+				}
+				left_child_id = C.int(neigh[1].Id())
+				right_child_id = C.int(neigh[2].Id())
 			}
-			left_child_id := C.int(neigh[1].Id())
-			right_child_id := C.int(neigh[2].Id())
-			operations = append(operations, C.makeOperation(C.int(prev.Id()), BEAGLE_OP_NONE, BEAGLE_OP_NONE, left_child_id, left_child_id, right_child_id, right_child_id))
+			fmt.Println("id:", cur.Id(), left_child_id, right_child_id)
+			operations = append(operations, C.makeOperation(C.int(cur.Id()), BEAGLE_OP_NONE, BEAGLE_OP_NONE, left_child_id, left_child_id, right_child_id, right_child_id))
 		}
 	})
 
-	// C.beagleUpdatePartials(instance,
-	// 	(*C.BeagleOperation)(&operations[0]),
-	// 	2,
-	// 	BEAGLE_OP_NONE)
+	if len(operations) == 0 {
+		panic("No operations to do!")
+	}
+
+	C.beagleUpdatePartials(instance,
+		(*C.BeagleOperation)(&operations[0]),
+		1,
+		// C.int(len(operations)),
+		BEAGLE_OP_NONE)
 
 	// var logLp C.double
 	// rootIndex := [1]C.int{4}
