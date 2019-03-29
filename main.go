@@ -184,10 +184,10 @@ func main() {
 	C.beagleSetEigenDecomposition(instance, 0, &evec[0], &ivec[0], &eval[0])
 
 	C.beagleUpdateTransitionMatrices(instance,
-		0,                            // eigenIndex
-		(*C.int)(&nodeIndices[0]),    // probabilityIndices
-		nil,                          // firstDerivativeIndices
-		nil,                          // secondDerivativeIndices
+		0, // eigenIndex
+		(*C.int)(&nodeIndices[0]), // probabilityIndices
+		nil, // firstDerivativeIndices
+		nil, // secondDerivativeIndices
 		(*C.double)(&edgeLengths[0]), // edgeLengths
 		C.int(edgeCount))             // count
 
@@ -205,7 +205,7 @@ func main() {
 			}
 			left_child_id := C.int(neigh[1].Id())
 			right_child_id := C.int(neigh[2].Id())
-			operations.append(C.makeOperation(C.int(prev.Id()), BEAGLE_OP_NONE, BEAGLE_OP_NONE, left_child_id, left_child_id, right_child_id, right_child_id))
+			operations = append(operations, C.makeOperation(C.int(prev.Id()), BEAGLE_OP_NONE, BEAGLE_OP_NONE, left_child_id, left_child_id, right_child_id, right_child_id))
 		}
 	})
 
