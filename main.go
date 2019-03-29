@@ -85,10 +85,11 @@ func printNode(cur *tree.Node, prev *tree.Node) {
 }
 
 func main() {
+	alignmentPath := "hello.fasta"
+	treePath := "hello.nwk"
 
 	var alignmentFile *os.File
-
-	alignmentFile, err := os.Open("hello.fasta")
+	alignmentFile, err := os.Open(alignmentPath)
 	if err != nil {
 		panic(err)
 	}
@@ -100,7 +101,7 @@ func main() {
 
 	var t *tree.Tree
 	var treeFile *os.File
-	if treeFile, err = os.Open("hello.nwk"); err != nil {
+	if treeFile, err = os.Open(treePath); err != nil {
 		panic(err)
 	}
 	t, err = newick.NewParser(treeFile).Parse()
@@ -149,12 +150,14 @@ func main() {
 
 	nextId := 0
 
+	// We go through the tips first because they need to have the lowest ids.
 	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
 		if cur.Tip() {
 			cur.SetId(nextId)
 			nextId = nextId + 1
 			nodeIndices[cur.Id()] = C.int(cur.Id())
 			C.beagleSetTipStates(instance, C.int(cur.Id()), stateMap[cur.Name()])
+			edgeLengths[cur.Id()] = C.double(parentEdge.Length())
 		}
 	})
 
@@ -197,6 +200,14 @@ func main() {
 	operationCount := tipCount - 1
 	operations := make([]C.BeagleOperation, 0, operationCount)
 
+	// fmt.Println(nodeIndices)
+	// fmt.Println(edgeLengths)
+	// m := make([]C.double, 16)
+	// for i := 0; i < edgeCount; i++ {
+	// 	C.beagleGetTransitionMatrix(instance, C.int(i), (*C.double)(&m[0]))
+	// 	fmt.Println(m)
+	// }
+
 	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
 		if cur.Tip() == false {
 			var left_child_id C.int
@@ -216,7 +227,7 @@ func main() {
 				left_child_id = C.int(neigh[1].Id())
 				right_child_id = C.int(neigh[2].Id())
 			}
-			fmt.Println("id:", cur.Id(), left_child_id, right_child_id)
+			// fmt.Println("id:", cur.Id(), left_child_id, right_child_id)
 			operations = append(operations, C.makeOperation(C.int(cur.Id()), BEAGLE_OP_NONE, BEAGLE_OP_NONE, left_child_id, left_child_id, right_child_id, right_child_id))
 		}
 	})
