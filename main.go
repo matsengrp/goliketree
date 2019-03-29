@@ -148,18 +148,25 @@ func main() {
 	nodeIndices := make([]C.int, edgeCount)
 
 	nextId := 0
+
 	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
-		cur.SetId(nextId)
-		nextId = nextId + 1
-
-		nodeIndices[cur.Id()] = C.int(cur.Id())
-
-		if cur != t.Root() {
-			edgeLengths[cur.Id()] = C.double(parentEdge.Length())
-		}
-
 		if cur.Tip() {
+			cur.SetId(nextId)
+			nextId = nextId + 1
+			nodeIndices[cur.Id()] = C.int(cur.Id())
 			C.beagleSetTipStates(instance, C.int(cur.Id()), stateMap[cur.Name()])
+		}
+	})
+
+	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
+		if !cur.Tip() {
+			cur.SetId(nextId)
+			nextId = nextId + 1
+			nodeIndices[cur.Id()] = C.int(cur.Id())
+
+			if parentEdge != nil {
+				edgeLengths[cur.Id()] = C.double(parentEdge.Length())
+			}
 		}
 	})
 
@@ -220,24 +227,23 @@ func main() {
 
 	C.beagleUpdatePartials(instance,
 		(*C.BeagleOperation)(&operations[0]),
-		1,
-		// C.int(len(operations)),
+		C.int(len(operations)),
 		BEAGLE_OP_NONE)
 
-	// var logLp C.double
-	// rootIndex := [1]C.int{4}
-	// categoryWeightIndex := [1]C.int{0}
-	// stateFrequencyIndex := [1]C.int{0}
-	// cumulativeScaleIndex := [1]C.int{BEAGLE_OP_NONE}
+	var logLp C.double
+	rootIndex := [1]C.int{C.int(t.Root().Id())}
+	categoryWeightIndex := [1]C.int{0}
+	stateFrequencyIndex := [1]C.int{0}
+	cumulativeScaleIndex := [1]C.int{BEAGLE_OP_NONE}
 
-	// C.beagleCalculateRootLogLikelihoods(instance,
-	// 	(*C.int)(&rootIndex[0]),
-	// 	(*C.int)(&categoryWeightIndex[0]),
-	// 	(*C.int)(&stateFrequencyIndex[0]),
-	// 	(*C.int)(&cumulativeScaleIndex[0]),
-	// 	1,
-	// 	&logLp)
+	C.beagleCalculateRootLogLikelihoods(instance,
+		(*C.int)(&rootIndex[0]),
+		(*C.int)(&categoryWeightIndex[0]),
+		(*C.int)(&stateFrequencyIndex[0]),
+		(*C.int)(&cumulativeScaleIndex[0]),
+		1,
+		&logLp)
 
-	// fmt.Println("logL =", logLp)
-	// fmt.Println("Woof!")
+	fmt.Println("logL =", logLp)
+	fmt.Println("Woof!")
 }
