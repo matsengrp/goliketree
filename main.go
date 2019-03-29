@@ -148,17 +148,13 @@ func main() {
 	nodeIndices := make([]C.int, edgeCount)
 
 	nextId := 0
-	t.PreOrder(func(cur *tree.Node, prev *tree.Node) {
+	t.PreOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
 		cur.SetId(nextId)
 		nextId = nextId + 1
 
 		nodeIndices[cur.Id()] = C.int(cur.Id())
 
 		if cur != t.Root() {
-			parentEdge, err := cur.ParentEdge()
-			if err != nil {
-				panic(err)
-			}
 			edgeLengths[cur.Id()] = C.double(parentEdge.Length())
 		}
 
@@ -184,17 +180,17 @@ func main() {
 	C.beagleSetEigenDecomposition(instance, 0, &evec[0], &ivec[0], &eval[0])
 
 	C.beagleUpdateTransitionMatrices(instance,
-		0,                            // eigenIndex
-		(*C.int)(&nodeIndices[0]),    // probabilityIndices
-		nil,                          // firstDerivativeIndices
-		nil,                          // secondDerivativeIndices
+		0, // eigenIndex
+		(*C.int)(&nodeIndices[0]), // probabilityIndices
+		nil, // firstDerivativeIndices
+		nil, // secondDerivativeIndices
 		(*C.double)(&edgeLengths[0]), // edgeLengths
 		C.int(edgeCount))             // count
 
 	operationCount := tipCount - 1
 	operations := make([]C.BeagleOperation, 0, operationCount)
 
-	t.PostOrder(func(cur *tree.Node, prev *tree.Node) {
+	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
 		if cur != t.Root() && cur.Tip() == false {
 			if cur.Nneigh() != 3 {
 				panic("Internal node doesn't have degree 3")
@@ -205,7 +201,7 @@ func main() {
 			}
 			left_child_id := C.int(neigh[1].Id())
 			right_child_id := C.int(neigh[2].Id())
-			operations.append(C.makeOperation(C.int(prev.Id()), BEAGLE_OP_NONE, BEAGLE_OP_NONE, left_child_id, left_child_id, right_child_id, right_child_id))
+			operations = append(operations, C.makeOperation(C.int(prev.Id()), BEAGLE_OP_NONE, BEAGLE_OP_NONE, left_child_id, left_child_id, right_child_id, right_child_id))
 		}
 	})
 
