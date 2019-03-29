@@ -80,10 +80,6 @@ func filledDoubleArr(length int, value C.double) *C.double {
 	return (*C.double)(&a[0])
 }
 
-func printNode(cur *tree.Node, prev *tree.Node) {
-	fmt.Print(cur.Id(), ",")
-}
-
 func main() {
 	alignmentPath := "hello.fasta"
 	treePath := "hello.nwk"
