@@ -81,8 +81,12 @@ func filledDoubleArr(length int, value C.double) *C.double {
 }
 
 func main() {
-	alignmentPath := "hello.fasta"
-	treePath := "hello.nwk"
+	if len(os.Args) != 3 {
+		fmt.Println("`goliketree FASTA NEWICK`, please.")
+		os.Exit(1)
+	}
+	alignmentPath := os.Args[1]
+	treePath := os.Args[2]
 
 	var alignmentFile *os.File
 	alignmentFile, err := os.Open(alignmentPath)
@@ -252,5 +256,4 @@ func main() {
 		&logLp)
 
 	fmt.Println("logL =", logLp)
-	fmt.Println("Woof!")
 }
