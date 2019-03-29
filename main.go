@@ -148,17 +148,13 @@ func main() {
 	nodeIndices := make([]C.int, edgeCount)
 
 	nextId := 0
-	t.PreOrder(func(cur *tree.Node, prev *tree.Node) {
+	t.PreOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
 		cur.SetId(nextId)
 		nextId = nextId + 1
 
 		nodeIndices[cur.Id()] = C.int(cur.Id())
 
 		if cur != t.Root() {
-			parentEdge, err := cur.ParentEdge()
-			if err != nil {
-				panic(err)
-			}
 			edgeLengths[cur.Id()] = C.double(parentEdge.Length())
 		}
 
@@ -194,7 +190,7 @@ func main() {
 	operationCount := tipCount - 1
 	operations := make([]C.BeagleOperation, 0, operationCount)
 
-	t.PostOrder(func(cur *tree.Node, prev *tree.Node) {
+	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
 		if cur != t.Root() && cur.Tip() == false {
 			if cur.Nneigh() != 3 {
 				panic("Internal node doesn't have degree 3")
