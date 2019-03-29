@@ -80,15 +80,6 @@ func filledDoubleArr(length int, value C.double) *C.double {
 	return (*C.double)(&a[0])
 }
 
-func makeNumberer() func(*tree.Node, *tree.Node) {
-	nextId := 0
-
-	return func(cur *tree.Node, prev *tree.Node) {
-		cur.SetId(nextId)
-		nextId = nextId + 1
-	}
-}
-
 func printNode(cur *tree.Node, prev *tree.Node) {
 	fmt.Print(cur.Id(), ",")
 }
@@ -97,7 +88,7 @@ func main() {
 
 	var alignmentFile *os.File
 
-	alignmentFile, err := os.Open("hiv-gag.fasta")
+	alignmentFile, err := os.Open("hello.fasta")
 	if err != nil {
 		panic(err)
 	}
@@ -109,7 +100,7 @@ func main() {
 
 	var t *tree.Tree
 	var treeFile *os.File
-	if treeFile, err = os.Open("hiv-gag.nwk"); err != nil {
+	if treeFile, err = os.Open("hello.nwk"); err != nil {
 		panic(err)
 	}
 	t, err = newick.NewParser(treeFile).Parse()
@@ -118,12 +109,14 @@ func main() {
 	}
 
 	tipCount := len(t.Tips())
+	edgeCount := 2*tipCount - 1
+
 	partialsBufferCount := tipCount - 1
 	compactBufferCount := tipCount
 	stateCount := 4
 	patternCount := alignment.Length()
 	eigenBufferCount := 1
-	matrixBufferCount := tipCount + 1
+	matrixBufferCount := edgeCount
 	categoryCount := 1
 	scaleBufferCount := 0
 	resourceCount := 0
@@ -151,47 +144,70 @@ func main() {
 		log.Fatal("Failed to obtain BEAGLE instance")
 	}
 
-	numberer := makeNumberer()
-	// These two steps could be combined.
-	t.PreOrder(numberer)
+	edgeLengths := make([]C.double, edgeCount)
+	nodeIndices := make([]C.int, edgeCount)
+
+	nextId := 0
 	t.PreOrder(func(cur *tree.Node, prev *tree.Node) {
+		cur.SetId(nextId)
+		nextId = nextId + 1
+
+		nodeIndices[cur.Id()] = C.int(cur.Id())
+
+		if cur != t.Root() {
+			parentEdge, err := cur.ParentEdge()
+			if err != nil {
+				panic(err)
+			}
+			edgeLengths[cur.Id()] = C.double(parentEdge.Length())
+		}
+
 		if cur.Tip() {
 			C.beagleSetTipStates(instance, C.int(cur.Id()), stateMap[cur.Name()])
 		}
 	})
 
-	t.PostOrder(printNode)
+	patternWeights := filledDoubleArr(patternCount, 1.)
+	C.beagleSetPatternWeights(instance, patternWeights)
 
-	// patternWeights := filledDoubleArr(alnLen, 1.)
-	// C.beagleSetPatternWeights(instance, patternWeights)
+	freqs := filledDoubleArr(4, 0.25)
+	C.beagleSetStateFrequencies(instance, 0, freqs)
 
-	// freqs := filledDoubleArr(4, 0.25)
-	// C.beagleSetStateFrequencies(instance, 0, freqs)
+	weights := filledDoubleArr(1, 1.)
+	C.beagleSetCategoryWeights(instance, 0, weights)
+	rates := filledDoubleArr(1, 1.)
+	C.beagleSetCategoryRates(instance, rates)
 
-	// weights := filledDoubleArr(1, 1.)
-	// C.beagleSetCategoryWeights(instance, 0, weights)
-	// rates := filledDoubleArr(1, 1.)
-	// C.beagleSetCategoryRates(instance, rates)
+	evec := []C.double{1.0, 2.0, 0.0, 0.5, 1.0, -2.0, 0.5, 0.0, 1.0, 2.0, 0.0, -0.5, 1.0, -2.0, -0.5, 0.0}
+	ivec := []C.double{0.25, 0.25, 0.25, 0.25, 0.125, -0.125, 0.125, -0.125, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, -1.0, 0.0}
+	eval := []C.double{0.0, -1.3333333333333333, -1.3333333333333333, -1.3333333333333333}
+	C.beagleSetEigenDecomposition(instance, 0, &evec[0], &ivec[0], &eval[0])
 
-	// evec := []C.double{1.0, 2.0, 0.0, 0.5, 1.0, -2.0, 0.5, 0.0, 1.0, 2.0, 0.0, -0.5, 1.0, -2.0, -0.5, 0.0}
-	// ivec := []C.double{0.25, 0.25, 0.25, 0.25, 0.125, -0.125, 0.125, -0.125, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, -1.0, 0.0}
-	// eval := []C.double{0.0, -1.3333333333333333, -1.3333333333333333, -1.3333333333333333}
-	// C.beagleSetEigenDecomposition(instance, 0, &evec[0], &ivec[0], &eval[0])
+	C.beagleUpdateTransitionMatrices(instance,
+		0,                            // eigenIndex
+		(*C.int)(&nodeIndices[0]),    // probabilityIndices
+		nil,                          // firstDerivativeIndices
+		nil,                          // secondDerivativeIndices
+		(*C.double)(&edgeLengths[0]), // edgeLengths
+		C.int(edgeCount))             // count
 
-	// nodeIndices := [4]C.int{0, 1, 2, 3}
-	// edgeLengths := []C.double{0.1, 0.1, 0.2, 0.1}
+	operationCount := tipCount - 1
+	operations := make([]C.BeagleOperation, 0, operationCount)
 
-	// C.beagleUpdateTransitionMatrices(instance,
-	// 	0,                            // eigenIndex
-	// 	(*C.int)(&nodeIndices[0]),    // probabilityIndices
-	// 	nil,                          // firstDerivativeIndices
-	// 	nil,                          // secondDerivativeIndices
-	// 	(*C.double)(&edgeLengths[0]), // edgeLengths
-	// 	4)                            // count
-
-	// op0 := C.makeOperation(3, BEAGLE_OP_NONE, BEAGLE_OP_NONE, 0, 0, 1, 1)
-	// op1 := C.makeOperation(4, BEAGLE_OP_NONE, BEAGLE_OP_NONE, 2, 2, 3, 3)
-	// operations := [2]C.BeagleOperation{op0, op1}
+	t.PostOrder(func(cur *tree.Node, prev *tree.Node) {
+		if cur != t.Root() && cur.Tip() == false {
+			if cur.Nneigh() != 3 {
+				panic("Internal node doesn't have degree 3")
+			}
+			neigh := cur.Neigh()
+			if neigh[0] != prev {
+				panic("Neighbors are not ordered as expected.")
+			}
+			left_child_id := C.int(neigh[1].Id())
+			right_child_id := C.int(neigh[2].Id())
+			operations.append(C.makeOperation(C.int(prev.Id()), BEAGLE_OP_NONE, BEAGLE_OP_NONE, left_child_id, left_child_id, right_child_id, right_child_id))
+		}
+	})
 
 	// C.beagleUpdatePartials(instance,
 	// 	(*C.BeagleOperation)(&operations[0]),
