@@ -38,7 +38,7 @@ import (
 	"github.com/evolbioinfo/gotree/tree"
 )
 
-var BEAGLE_OP_NONE = C.int(C.BEAGLE_OP_NONE)
+var beagleOpNone = C.int(C.BEAGLE_OP_NONE)
 
 func getTable() [128]C.int {
 	var table [128]C.int
@@ -121,8 +121,8 @@ func main() {
 	categoryCount := 1
 	scaleBufferCount := 0
 	resourceCount := 0
-	var preferenceFlags C.long = 0
-	var requirementFlags C.long = 0
+	var preferenceFlags C.long
+	var requirementFlags C.long
 	var returnInfo C.BeagleInstanceDetails
 
 	instance := C.beagleCreateInstance(
@@ -148,13 +148,13 @@ func main() {
 	edgeLengths := make([]C.double, edgeCount)
 	nodeIndices := make([]C.int, edgeCount)
 
-	nextId := 0
+	nextID := 0
 
 	// We go through the tips first because they need to have the lowest ids.
 	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
 		if cur.Tip() {
-			cur.SetId(nextId)
-			nextId = nextId + 1
+			cur.SetId(nextID)
+			nextID = nextID + 1
 			nodeIndices[cur.Id()] = C.int(cur.Id())
 			C.beagleSetTipStates(instance, C.int(cur.Id()), stateMap[cur.Name()])
 			edgeLengths[cur.Id()] = C.double(parentEdge.Length())
@@ -163,8 +163,8 @@ func main() {
 
 	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
 		if !cur.Tip() {
-			cur.SetId(nextId)
-			nextId = nextId + 1
+			cur.SetId(nextID)
+			nextID = nextID + 1
 			nodeIndices[cur.Id()] = C.int(cur.Id())
 
 			if parentEdge != nil {
@@ -210,13 +210,13 @@ func main() {
 
 	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
 		if cur.Tip() == false {
-			var left_child_id C.int
-			var right_child_id C.int
+			var leftChildID C.int
+			var rightChildID C.int
 			neigh := cur.Neigh()
 			// For now, we assume a bifurcating root
 			if cur == t.Root() {
-				left_child_id = C.int(neigh[0].Id())
-				right_child_id = C.int(neigh[1].Id())
+				leftChildID = C.int(neigh[0].Id())
+				rightChildID = C.int(neigh[1].Id())
 			} else {
 				if cur.Nneigh() != 3 {
 					panic("Internal node doesn't have degree 3.")
@@ -224,11 +224,11 @@ func main() {
 				if neigh[0] != prev {
 					panic("Neighbors are not ordered as expected.")
 				}
-				left_child_id = C.int(neigh[1].Id())
-				right_child_id = C.int(neigh[2].Id())
+				leftChildID = C.int(neigh[1].Id())
+				rightChildID = C.int(neigh[2].Id())
 			}
-			// fmt.Println("id:", cur.Id(), left_child_id, right_child_id)
-			operations = append(operations, C.makeOperation(C.int(cur.Id()), BEAGLE_OP_NONE, BEAGLE_OP_NONE, left_child_id, left_child_id, right_child_id, right_child_id))
+			// fmt.Println("id:", cur.Id(), leftChildID, rightChildID)
+			operations = append(operations, C.makeOperation(C.int(cur.Id()), beagleOpNone, beagleOpNone, leftChildID, leftChildID, rightChildID, rightChildID))
 		}
 	})
 
@@ -239,13 +239,13 @@ func main() {
 	C.beagleUpdatePartials(instance,
 		(*C.BeagleOperation)(&operations[0]),
 		C.int(len(operations)),
-		BEAGLE_OP_NONE)
+		beagleOpNone)
 
 	var logLp C.double
 	rootIndex := [1]C.int{C.int(t.Root().Id())}
 	categoryWeightIndex := [1]C.int{0}
 	stateFrequencyIndex := [1]C.int{0}
-	cumulativeScaleIndex := [1]C.int{BEAGLE_OP_NONE}
+	cumulativeScaleIndex := [1]C.int{beagleOpNone}
 
 	C.beagleCalculateRootLogLikelihoods(instance,
 		(*C.int)(&rootIndex[0]),
