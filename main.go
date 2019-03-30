@@ -58,10 +58,6 @@ func treesOfPath(treePath string) []*tree.Tree {
 		treeSlice = append(treeSlice, trees.Tree)
 	}
 
-	if len(treeSlice) == 0 {
-		fmt.Println("No trees in file.")
-		os.Exit(0)
-	}
 	return treeSlice
 }
 
@@ -179,107 +175,121 @@ func main() {
 	stateMap := stateMapOfAlignment(alignment)
 
 	trees := treesOfPath(treePath)
-	t := trees[0]
+	if len(trees) == 0 {
+		fmt.Println("No trees in file.")
+		os.Exit(0)
+	}
 
-	instance := makeBeagleInstance(t, alignment)
+	instance := makeBeagleInstance(trees[0], alignment)
 	defer C.beagleFinalizeInstance(instance)
 
-	tipCount := len(t.Tips())
+	tipCount := len(trees[0].Tips())
 	edgeCount := 2*tipCount - 1
+
+	if alignment.NbSequences() != tipCount {
+		fmt.Println("Number of sequences doesn't match the number of tips.")
+		os.Exit(1)
+	}
 
 	edgeLengths := make([]C.double, edgeCount)
 	nodeIndices := make([]C.int, edgeCount)
 
-	nextID := 0
-
-	// We go through the tips first because they need to have the lowest ids.
-	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
-		if cur.Tip() {
-			cur.SetId(nextID)
-			nextID = nextID + 1
-			nodeIndices[cur.Id()] = C.int(cur.Id())
-			C.beagleSetTipStates(instance, C.int(cur.Id()), stateMap[cur.Name()])
-			edgeLengths[cur.Id()] = C.double(parentEdge.Length())
+	for _, t := range trees {
+		if len(t.Tips()) != tipCount {
+			fmt.Println("Not all trees have the same number of tips.")
+			os.Exit(1)
 		}
-	})
 
-	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
-		if !cur.Tip() {
-			cur.SetId(nextID)
-			nextID = nextID + 1
-			nodeIndices[cur.Id()] = C.int(cur.Id())
-
-			if parentEdge != nil {
+		nextID := 0
+		// We go through the tips first because they need to have the lowest ids.
+		t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
+			if cur.Tip() {
+				cur.SetId(nextID)
+				nextID = nextID + 1
+				nodeIndices[cur.Id()] = C.int(cur.Id())
+				C.beagleSetTipStates(instance, C.int(cur.Id()), stateMap[cur.Name()])
 				edgeLengths[cur.Id()] = C.double(parentEdge.Length())
 			}
-		}
-	})
+		})
 
-	C.beagleUpdateTransitionMatrices(instance,
-		0,                            // eigenIndex
-		(*C.int)(&nodeIndices[0]),    // probabilityIndices
-		nil,                          // firstDerivativeIndices
-		nil,                          // secondDerivativeIndices
-		(*C.double)(&edgeLengths[0]), // edgeLengths
-		C.int(edgeCount))             // count
+		t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
+			if !cur.Tip() {
+				cur.SetId(nextID)
+				nextID = nextID + 1
+				nodeIndices[cur.Id()] = C.int(cur.Id())
 
-	operationCount := tipCount - 1
-	operations := make([]C.BeagleOperation, 0, operationCount)
-
-	// fmt.Println(nodeIndices)
-	// fmt.Println(edgeLengths)
-	// m := make([]C.double, 16)
-	// for i := 0; i < edgeCount; i++ {
-	// 	C.beagleGetTransitionMatrix(instance, C.int(i), (*C.double)(&m[0]))
-	// 	fmt.Println(m)
-	// }
-
-	t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
-		if cur.Tip() == false {
-			var leftChildID C.int
-			var rightChildID C.int
-			neigh := cur.Neigh()
-			// For now, we assume a bifurcating root
-			if cur == t.Root() {
-				leftChildID = C.int(neigh[0].Id())
-				rightChildID = C.int(neigh[1].Id())
-			} else {
-				if cur.Nneigh() != 3 {
-					panic("Internal node doesn't have degree 3.")
+				if parentEdge != nil {
+					edgeLengths[cur.Id()] = C.double(parentEdge.Length())
 				}
-				if neigh[0] != prev {
-					panic("Neighbors are not ordered as expected.")
-				}
-				leftChildID = C.int(neigh[1].Id())
-				rightChildID = C.int(neigh[2].Id())
 			}
-			// fmt.Println("id:", cur.Id(), leftChildID, rightChildID)
-			operations = append(operations, C.makeOperation(C.int(cur.Id()), beagleOpNone, beagleOpNone, leftChildID, leftChildID, rightChildID, rightChildID))
+		})
+
+		C.beagleUpdateTransitionMatrices(instance,
+			0,                            // eigenIndex
+			(*C.int)(&nodeIndices[0]),    // probabilityIndices
+			nil,                          // firstDerivativeIndices
+			nil,                          // secondDerivativeIndices
+			(*C.double)(&edgeLengths[0]), // edgeLengths
+			C.int(edgeCount))             // count
+
+		operationCount := tipCount - 1
+		operations := make([]C.BeagleOperation, 0, operationCount)
+
+		// fmt.Println(nodeIndices)
+		// fmt.Println(edgeLengths)
+		// m := make([]C.double, 16)
+		// for i := 0; i < edgeCount; i++ {
+		// 	C.beagleGetTransitionMatrix(instance, C.int(i), (*C.double)(&m[0]))
+		// 	fmt.Println(m)
+		// }
+
+		t.PostOrder(func(cur *tree.Node, prev *tree.Node, parentEdge *tree.Edge) {
+			if cur.Tip() == false {
+				var leftChildID C.int
+				var rightChildID C.int
+				neigh := cur.Neigh()
+				// For now, we assume a bifurcating root
+				if cur == t.Root() {
+					leftChildID = C.int(neigh[0].Id())
+					rightChildID = C.int(neigh[1].Id())
+				} else {
+					if cur.Nneigh() != 3 {
+						panic("Internal node doesn't have degree 3.")
+					}
+					if neigh[0] != prev {
+						panic("Neighbors are not ordered as expected.")
+					}
+					leftChildID = C.int(neigh[1].Id())
+					rightChildID = C.int(neigh[2].Id())
+				}
+				// fmt.Println("id:", cur.Id(), leftChildID, rightChildID)
+				operations = append(operations, C.makeOperation(C.int(cur.Id()), beagleOpNone, beagleOpNone, leftChildID, leftChildID, rightChildID, rightChildID))
+			}
+		})
+
+		if len(operations) == 0 {
+			panic("No operations to do!")
 		}
-	})
 
-	if len(operations) == 0 {
-		panic("No operations to do!")
+		C.beagleUpdatePartials(instance,
+			(*C.BeagleOperation)(&operations[0]),
+			C.int(len(operations)),
+			beagleOpNone)
+
+		var logLp C.double
+		rootIndex := [1]C.int{C.int(t.Root().Id())}
+		categoryWeightIndex := [1]C.int{0}
+		stateFrequencyIndex := [1]C.int{0}
+		cumulativeScaleIndex := [1]C.int{beagleOpNone}
+
+		C.beagleCalculateRootLogLikelihoods(instance,
+			(*C.int)(&rootIndex[0]),
+			(*C.int)(&categoryWeightIndex[0]),
+			(*C.int)(&stateFrequencyIndex[0]),
+			(*C.int)(&cumulativeScaleIndex[0]),
+			1,
+			&logLp)
+
+		fmt.Println(logLp)
 	}
-
-	C.beagleUpdatePartials(instance,
-		(*C.BeagleOperation)(&operations[0]),
-		C.int(len(operations)),
-		beagleOpNone)
-
-	var logLp C.double
-	rootIndex := [1]C.int{C.int(t.Root().Id())}
-	categoryWeightIndex := [1]C.int{0}
-	stateFrequencyIndex := [1]C.int{0}
-	cumulativeScaleIndex := [1]C.int{beagleOpNone}
-
-	C.beagleCalculateRootLogLikelihoods(instance,
-		(*C.int)(&rootIndex[0]),
-		(*C.int)(&categoryWeightIndex[0]),
-		(*C.int)(&stateFrequencyIndex[0]),
-		(*C.int)(&cumulativeScaleIndex[0]),
-		1,
-		&logLp)
-
-	fmt.Println("logL =", logLp)
 }
