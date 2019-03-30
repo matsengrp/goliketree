@@ -28,13 +28,15 @@ package main
 // }
 import "C"
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
 	"github.com/evolbioinfo/goalign/align"
 	"github.com/evolbioinfo/goalign/io/fasta"
-	"github.com/evolbioinfo/gotree/io/newick"
+	"github.com/evolbioinfo/gotree/io/utils"
 	"github.com/evolbioinfo/gotree/tree"
 )
 
@@ -153,15 +155,43 @@ func main() {
 	}
 	stateMap := stateMapOfAlignment(alignment)
 
-	var t *tree.Tree
-	var treeFile *os.File
-	if treeFile, err = os.Open(treePath); err != nil {
-		panic(err)
-	}
-	t, err = newick.NewParser(treeFile).Parse()
+	// var t *tree.Tree
+	// var treeFile *os.File
+	// if treeFile, err = os.Open(treePath); err != nil {
+	// 	panic(err)
+	// }
+	// t, err = newick.NewParser(treeFile).Parse()
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	var trees tree.Trees
+	var treeChan <-chan tree.Trees
+	var treeFile io.Closer
+	var treeReader *bufio.Reader
+	//treeSlice := make(tree.Trees, 0, 20)
+	var treeSlice []*tree.Tree
+
+	/* File reader (plain text or gzip) */
+	treeFile, treeReader, err = utils.GetReader(treePath)
 	if err != nil {
 		panic(err)
 	}
+	defer treeFile.Close()
+	treeChan = utils.ReadMultiTrees(treeReader, utils.FORMAT_NEWICK)
+	for trees = range treeChan {
+		if trees.Err != nil {
+			panic(trees.Err)
+		}
+		treeSlice = append(treeSlice, trees.Tree)
+	}
+
+	if len(treeSlice) == 0 {
+		fmt.Println("No trees in file.")
+		os.Exit(0)
+	}
+
+	t := treeSlice[0]
 
 	instance := makeBeagleInstance(t, alignment)
 	defer C.beagleFinalizeInstance(instance)
