@@ -80,6 +80,60 @@ func filledDoubleArr(length int, value C.double) *C.double {
 	return (*C.double)(&a[0])
 }
 
+func makeBeagleInstance(t *tree.Tree, alignment align.Alignment) C.int {
+	tipCount := len(t.Tips())
+	partialsBufferCount := tipCount - 1
+	compactBufferCount := tipCount
+	stateCount := 4
+	patternCount := alignment.Length()
+	eigenBufferCount := 1
+	matrixBufferCount := 2*tipCount - 1
+	categoryCount := 1
+	scaleBufferCount := 0
+	resourceCount := 0
+	var preferenceFlags C.long
+	var requirementFlags C.long
+	var returnInfo C.BeagleInstanceDetails
+
+	instance := C.beagleCreateInstance(
+		C.int(tipCount),
+		C.int(partialsBufferCount),
+		C.int(compactBufferCount),
+		C.int(stateCount),
+		C.int(patternCount),
+		C.int(eigenBufferCount),
+		C.int(matrixBufferCount),
+		C.int(categoryCount),
+		C.int(scaleBufferCount),
+		nil, // resourceList,
+		C.int(resourceCount),
+		preferenceFlags,
+		requirementFlags,
+		&returnInfo)
+
+	if instance < 0 {
+		log.Fatal("Failed to obtain BEAGLE instance")
+	}
+
+	patternWeights := filledDoubleArr(patternCount, 1.)
+	C.beagleSetPatternWeights(instance, patternWeights)
+
+	freqs := filledDoubleArr(4, 0.25)
+	C.beagleSetStateFrequencies(instance, 0, freqs)
+
+	weights := filledDoubleArr(1, 1.)
+	C.beagleSetCategoryWeights(instance, 0, weights)
+	rates := filledDoubleArr(1, 1.)
+	C.beagleSetCategoryRates(instance, rates)
+
+	evec := []C.double{1.0, 2.0, 0.0, 0.5, 1.0, -2.0, 0.5, 0.0, 1.0, 2.0, 0.0, -0.5, 1.0, -2.0, -0.5, 0.0}
+	ivec := []C.double{0.25, 0.25, 0.25, 0.25, 0.125, -0.125, 0.125, -0.125, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, -1.0, 0.0}
+	eval := []C.double{0.0, -1.3333333333333333, -1.3333333333333333, -1.3333333333333333}
+	C.beagleSetEigenDecomposition(instance, 0, &evec[0], &ivec[0], &eval[0])
+
+	return instance
+}
+
 func main() {
 	if len(os.Args) != 3 {
 		fmt.Println("`goliketree FASTA NEWICK`, please.")
@@ -109,41 +163,11 @@ func main() {
 		panic(err)
 	}
 
+	instance := makeBeagleInstance(t, alignment)
+	defer C.beagleFinalizeInstance(instance)
+
 	tipCount := len(t.Tips())
 	edgeCount := 2*tipCount - 1
-
-	partialsBufferCount := tipCount - 1
-	compactBufferCount := tipCount
-	stateCount := 4
-	patternCount := alignment.Length()
-	eigenBufferCount := 1
-	matrixBufferCount := edgeCount
-	categoryCount := 1
-	scaleBufferCount := 0
-	resourceCount := 0
-	var preferenceFlags C.long
-	var requirementFlags C.long
-	var returnInfo C.BeagleInstanceDetails
-
-	instance := C.beagleCreateInstance(
-		C.int(tipCount),
-		C.int(partialsBufferCount),
-		C.int(compactBufferCount),
-		C.int(stateCount),
-		C.int(patternCount),
-		C.int(eigenBufferCount),
-		C.int(matrixBufferCount),
-		C.int(categoryCount),
-		C.int(scaleBufferCount),
-		nil, // resourceList,
-		C.int(resourceCount),
-		preferenceFlags,
-		requirementFlags,
-		&returnInfo)
-
-	if instance < 0 {
-		log.Fatal("Failed to obtain BEAGLE instance")
-	}
 
 	edgeLengths := make([]C.double, edgeCount)
 	nodeIndices := make([]C.int, edgeCount)
@@ -172,22 +196,6 @@ func main() {
 			}
 		}
 	})
-
-	patternWeights := filledDoubleArr(patternCount, 1.)
-	C.beagleSetPatternWeights(instance, patternWeights)
-
-	freqs := filledDoubleArr(4, 0.25)
-	C.beagleSetStateFrequencies(instance, 0, freqs)
-
-	weights := filledDoubleArr(1, 1.)
-	C.beagleSetCategoryWeights(instance, 0, weights)
-	rates := filledDoubleArr(1, 1.)
-	C.beagleSetCategoryRates(instance, rates)
-
-	evec := []C.double{1.0, 2.0, 0.0, 0.5, 1.0, -2.0, 0.5, 0.0, 1.0, 2.0, 0.0, -0.5, 1.0, -2.0, -0.5, 0.0}
-	ivec := []C.double{0.25, 0.25, 0.25, 0.25, 0.125, -0.125, 0.125, -0.125, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, -1.0, 0.0}
-	eval := []C.double{0.0, -1.3333333333333333, -1.3333333333333333, -1.3333333333333333}
-	C.beagleSetEigenDecomposition(instance, 0, &evec[0], &ivec[0], &eval[0])
 
 	C.beagleUpdateTransitionMatrices(instance,
 		0,                            // eigenIndex
