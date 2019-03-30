@@ -28,9 +28,7 @@ package main
 // }
 import "C"
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"os"
 
@@ -41,6 +39,31 @@ import (
 )
 
 var beagleOpNone = C.int(C.BEAGLE_OP_NONE)
+
+func treesOfPath(treePath string) []*tree.Tree {
+	var trees tree.Trees
+	var treeChan <-chan tree.Trees
+	var treeSlice []*tree.Tree
+
+	treeFile, treeReader, err := utils.GetReader(treePath)
+	if err != nil {
+		panic(err)
+	}
+	defer treeFile.Close()
+	treeChan = utils.ReadMultiTrees(treeReader, utils.FORMAT_NEWICK)
+	for trees = range treeChan {
+		if trees.Err != nil {
+			panic(trees.Err)
+		}
+		treeSlice = append(treeSlice, trees.Tree)
+	}
+
+	if len(treeSlice) == 0 {
+		fmt.Println("No trees in file.")
+		os.Exit(0)
+	}
+	return treeSlice
+}
 
 func getTable() [128]C.int {
 	var table [128]C.int
@@ -155,43 +178,8 @@ func main() {
 	}
 	stateMap := stateMapOfAlignment(alignment)
 
-	// var t *tree.Tree
-	// var treeFile *os.File
-	// if treeFile, err = os.Open(treePath); err != nil {
-	// 	panic(err)
-	// }
-	// t, err = newick.NewParser(treeFile).Parse()
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	var trees tree.Trees
-	var treeChan <-chan tree.Trees
-	var treeFile io.Closer
-	var treeReader *bufio.Reader
-	//treeSlice := make(tree.Trees, 0, 20)
-	var treeSlice []*tree.Tree
-
-	/* File reader (plain text or gzip) */
-	treeFile, treeReader, err = utils.GetReader(treePath)
-	if err != nil {
-		panic(err)
-	}
-	defer treeFile.Close()
-	treeChan = utils.ReadMultiTrees(treeReader, utils.FORMAT_NEWICK)
-	for trees = range treeChan {
-		if trees.Err != nil {
-			panic(trees.Err)
-		}
-		treeSlice = append(treeSlice, trees.Tree)
-	}
-
-	if len(treeSlice) == 0 {
-		fmt.Println("No trees in file.")
-		os.Exit(0)
-	}
-
-	t := treeSlice[0]
+	trees := treesOfPath(treePath)
+	t := trees[0]
 
 	instance := makeBeagleInstance(t, alignment)
 	defer C.beagleFinalizeInstance(instance)
