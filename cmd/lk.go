@@ -78,7 +78,15 @@ func filledDoubleArr(length int, value C.double) *C.double {
 	return (*C.double)(&a[0])
 }
 
-func makeBeagleInstance(t *tree.Tree, alignment align.Alignment) C.int {
+func convertToDoubleArr(input []int) *C.double {
+	a := make([]C.double, len(input))
+	for i, v := range input {
+		a[i] = C.double(v)
+	}
+	return &a[0]
+}
+
+func makeBeagleInstance(t *tree.Tree, alignment align.Alignment, patternWeightsInt []int) C.int {
 	tipCount := len(t.Tips())
 	partialsBufferCount := tipCount - 1
 	compactBufferCount := tipCount
@@ -113,7 +121,7 @@ func makeBeagleInstance(t *tree.Tree, alignment align.Alignment) C.int {
 		log.Fatal("Failed to obtain BEAGLE instance")
 	}
 
-	patternWeights := filledDoubleArr(patternCount, 1.)
+	patternWeights := convertToDoubleArr(patternWeightsInt)
 	C.beagleSetPatternWeights(instance, patternWeights)
 
 	freqs := filledDoubleArr(4, 0.25)
@@ -133,9 +141,10 @@ func makeBeagleInstance(t *tree.Tree, alignment align.Alignment) C.int {
 }
 
 func computelk(trees []*tree.Tree, alignment align.Alignment) (err error) {
+	patternWeightsInt := alignment.Compress()
 	stateMap := stateMapOfAlignment(alignment)
 
-	instance := makeBeagleInstance(trees[0], alignment)
+	instance := makeBeagleInstance(trees[0], alignment, patternWeightsInt)
 	defer C.beagleFinalizeInstance(instance)
 
 	tipCount := len(trees[0].Tips())
