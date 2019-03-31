@@ -26,7 +26,7 @@ func treesOfPath(treePath string) (treeSlice []*tree.Tree, err error) {
 	treeSlice = make([]*tree.Tree, 0, 10)
 
 	if treeFile, treeReader, err = utils.GetReader(treePath); err != nil {
-		panic(err)
+		return
 	}
 	defer treeFile.Close()
 	treeChan = utils.ReadMultiTrees(treeReader, utils.FORMAT_NEWICK)
