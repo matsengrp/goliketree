@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"C"
 	"bufio"
 	"fmt"
 	"io"
 	"os"
+	"runtime"
+	"sync"
 
 	"github.com/evolbioinfo/goalign/align"
 	"github.com/evolbioinfo/goalign/io/fasta"
@@ -16,30 +19,7 @@ import (
 
 var treepath string
 var alignpath string
-
-func treesOfPath(treePath string) (treeSlice []*tree.Tree, err error) {
-	var trees tree.Trees
-	var treeChan <-chan tree.Trees
-	var treeFile io.Closer
-	var treeReader *bufio.Reader
-
-	treeSlice = make([]*tree.Tree, 0, 10)
-
-	if treeFile, treeReader, err = utils.GetReader(treePath); err != nil {
-		return
-	}
-	defer treeFile.Close()
-	treeChan = utils.ReadMultiTrees(treeReader, utils.FORMAT_NEWICK)
-	for trees = range treeChan {
-		if trees.Err != nil {
-			err = trees.Err
-			return
-		}
-		treeSlice = append(treeSlice, trees.Tree)
-	}
-
-	return
-}
+var threads int
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -48,8 +28,12 @@ var rootCmd = &cobra.Command{
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		var alignmentFile *os.File
-		var trees []*tree.Tree
-		var align align.Alignment
+		var al align.Alignment
+		var treeChan <-chan tree.Trees
+		var treeFile io.Closer
+		var treeReader *bufio.Reader
+		// Wait all Go routines
+		var wg sync.WaitGroup
 
 		if alignpath == "none" {
 			err = fmt.Errorf("Alignment file is mandatory")
@@ -60,14 +44,49 @@ var rootCmd = &cobra.Command{
 			return
 		}
 
-		if align, err = fasta.NewParser(alignmentFile).Parse(); err != nil {
+		if al, err = fasta.NewParser(alignmentFile).Parse(); err != nil {
 			return
 		}
+		patternWeightsInt := al.Compress()
 
-		if trees, err = treesOfPath(treepath); err != nil {
+		if treeFile, treeReader, err = utils.GetReader(treepath); err != nil {
 			return
 		}
-		err = computelk(trees, align)
+		defer treeFile.Close()
+		treeChan = utils.ReadMultiTrees(treeReader, utils.FORMAT_NEWICK)
+
+		if threads > runtime.NumCPU() {
+			threads = runtime.NumCPU()
+		}
+		runtime.GOMAXPROCS(threads)
+		wg.Add(threads)
+
+		for p := 0; p < threads; p++ {
+			go func() {
+				var err2 error
+				var lk float64
+				var trees tree.Trees
+				defer wg.Done()
+				for trees = range treeChan {
+					if trees.Err != nil {
+						err = trees.Err
+						return
+					}
+					if err2 != nil {
+						err = err2
+						return
+					}
+					if lk, err2 = computelk(trees.Tree, al, patternWeightsInt); err != nil {
+						err = err2
+						return
+					} else {
+						fmt.Printf("Tree %d: lk=%v\n", trees.Id, lk)
+					}
+				}
+			}()
+		}
+		wg.Wait()
+
 		return
 	},
 }
@@ -83,5 +102,6 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&treepath, "tree", "t", "stdin", "Input tree file")
+	rootCmd.PersistentFlags().IntVarP(&threads, "threads", "p", 1, "Number of threads")
 	rootCmd.PersistentFlags().StringVarP(&alignpath, "align", "a", "none", "Input align file (mandatory)")
 }
