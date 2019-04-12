@@ -32,6 +32,7 @@ import (
 	"sync"
 
 	"github.com/evolbioinfo/goalign/align"
+	"github.com/evolbioinfo/goalign/models/dna"
 	"github.com/evolbioinfo/gotree/tree"
 )
 
@@ -86,6 +87,14 @@ func convertToDoubleArr(input []int) *C.double {
 	return &a[0]
 }
 
+func convertFloatToDoubleArr(input []float64) *C.double {
+	a := make([]C.double, len(input))
+	for i, v := range input {
+		a[i] = C.double(v)
+	}
+	return &a[0]
+}
+
 func makeBeagleInstance(t *tree.Tree, alignment align.Alignment, patternWeightsInt []int) (instance C.int, err error) {
 	mux.Lock()
 	tipCount := len(t.Tips())
@@ -101,6 +110,8 @@ func makeBeagleInstance(t *tree.Tree, alignment align.Alignment, patternWeightsI
 	var preferenceFlags C.long
 	var requirementFlags C.long
 	var returnInfo C.BeagleInstanceDetails
+	var evec, ivec []float64
+	var eval []float64
 
 	instance = C.beagleCreateInstance(
 		C.int(tipCount),
@@ -134,10 +145,18 @@ func makeBeagleInstance(t *tree.Tree, alignment align.Alignment, patternWeightsI
 	rates := filledDoubleArr(1, 1.)
 	C.beagleSetCategoryRates(instance, rates)
 
-	evec := []C.double{1.0, 2.0, 0.0, 0.5, 1.0, -2.0, 0.5, 0.0, 1.0, 2.0, 0.0, -0.5, 1.0, -2.0, -0.5, 0.0}
-	ivec := []C.double{0.25, 0.25, 0.25, 0.25, 0.125, -0.125, 0.125, -0.125, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, -1.0, 0.0}
-	eval := []C.double{0.0, -1.3333333333333333, -1.3333333333333333, -1.3333333333333333}
-	C.beagleSetEigenDecomposition(instance, 0, &evec[0], &ivec[0], &eval[0])
+	// evec := []C.double{1.0, 2.0, 0.0, 0.5, 1.0, -2.0, 0.5, 0.0, 1.0, 2.0, 0.0, -0.5, 1.0, -2.0, -0.5, 0.0}
+	// ivec := []C.double{0.25, 0.25, 0.25, 0.25, 0.125, -0.125, 0.125, -0.125, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, -1.0, 0.0}
+	// eval := []C.double{0.0, -1.3333333333333333, -1.3333333333333333, -1.3333333333333333}
+	m := dna.NewGTRModel()
+	m.SetParameters(1., 1., 1., 1., 1., 1., 1./4., 1./4., 1./4., 1./4.)
+	if eval, ivec, evec, err = m.Eigens(); err != nil {
+		return
+	}
+	C.beagleSetEigenDecomposition(instance, 0,
+		convertFloatToDoubleArr(evec),
+		convertFloatToDoubleArr(ivec),
+		convertFloatToDoubleArr(eval))
 	mux.Unlock()
 	return
 }
