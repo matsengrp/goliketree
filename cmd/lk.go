@@ -32,7 +32,7 @@ import (
 	"sync"
 
 	"github.com/evolbioinfo/goalign/align"
-	"github.com/evolbioinfo/goalign/models/dna"
+	"github.com/evolbioinfo/gotree/models/dna"
 	"github.com/evolbioinfo/gotree/tree"
 )
 
@@ -149,7 +149,7 @@ func makeBeagleInstance(t *tree.Tree, alignment align.Alignment, patternWeightsI
 	// ivec := []C.double{0.25, 0.25, 0.25, 0.25, 0.125, -0.125, 0.125, -0.125, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, -1.0, 0.0}
 	// eval := []C.double{0.0, -1.3333333333333333, -1.3333333333333333, -1.3333333333333333}
 	m := dna.NewGTRModel()
-	m.SetParameters(1., 1., 1., 1., 1., 1., 1./4., 1./4., 1./4., 1./4.)
+	m.InitModel(1., 1., 1., 1., 1., 1., 1./4., 1./4., 1./4., 1./4.)
 	if eval, ivec, evec, err = m.Eigens(); err != nil {
 		return
 	}
