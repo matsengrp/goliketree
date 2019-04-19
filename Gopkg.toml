@@ -39,3 +39,7 @@
 [prune]
   go-tests = true
   unused-packages = true
+  
+[[constraint]]
+  name = "gonum.org/v1/gonum"
+  branch = "master"

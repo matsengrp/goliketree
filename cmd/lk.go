@@ -32,8 +32,9 @@ import (
 	"sync"
 
 	"github.com/evolbioinfo/goalign/align"
-	"github.com/evolbioinfo/gotree/models/dna"
+	"github.com/evolbioinfo/goalign/models/dna"
 	"github.com/evolbioinfo/gotree/tree"
+	"gonum.org/v1/gonum/mat"
 )
 
 var beagleOpNone = C.int(C.BEAGLE_OP_NONE)
@@ -95,6 +96,19 @@ func convertFloatToDoubleArr(input []float64) *C.double {
 	return &a[0]
 }
 
+func convertDenseToDoubleArr(input *mat.Dense) *C.double {
+	r, c := input.Dims()
+	a := make([]C.double, r*c)
+	n := 0
+	for i := 0; i < r; i++ {
+		for j := 0; j < c; j++ {
+			a[n] = C.double(input.At(i, j))
+			n++
+		}
+	}
+	return &a[0]
+}
+
 func makeBeagleInstance(t *tree.Tree, alignment align.Alignment, patternWeightsInt []int) (instance C.int, err error) {
 	mux.Lock()
 	tipCount := len(t.Tips())
@@ -110,7 +124,7 @@ func makeBeagleInstance(t *tree.Tree, alignment align.Alignment, patternWeightsI
 	var preferenceFlags C.long
 	var requirementFlags C.long
 	var returnInfo C.BeagleInstanceDetails
-	var evec, ivec []float64
+	var evec, ivec *mat.Dense
 	var eval []float64
 
 	instance = C.beagleCreateInstance(
@@ -154,8 +168,8 @@ func makeBeagleInstance(t *tree.Tree, alignment align.Alignment, patternWeightsI
 		return
 	}
 	C.beagleSetEigenDecomposition(instance, 0,
-		convertFloatToDoubleArr(evec),
-		convertFloatToDoubleArr(ivec),
+		convertDenseToDoubleArr(evec),
+		convertDenseToDoubleArr(ivec),
 		convertFloatToDoubleArr(eval))
 	mux.Unlock()
 	return
