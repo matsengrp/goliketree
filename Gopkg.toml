@@ -30,11 +30,11 @@
 
 [[constraint]]
   name = "github.com/evolbioinfo/goalign"
-  branch = "dev"
+  version = ">=v0.3.1-alpha"
 
 [[constraint]]
   name = "github.com/evolbioinfo/gotree"
-  branch = "dev"
+  version = "v0.3.1a"
 
 [prune]
   go-tests = true
